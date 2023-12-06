@@ -1,0 +1,5 @@
+/.ipynb_checkpoints
+/venv
+step-gen.ipynb
+.idea
+__pycache/

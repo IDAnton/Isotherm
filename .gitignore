@@ -2,4 +2,5 @@
 /venv
 step-gen.ipynb
 .idea
-__pycache/
+/__pycache__/
+*.mp4

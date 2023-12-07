@@ -1,13 +1,9 @@
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.animation as animation
 
-import os
-import pygaps
-
-mpl.use('TkAgg')
+# mpl.use('TkAgg')
 plt.rcParams.update({'font.size': 14})
 
 
@@ -97,37 +93,39 @@ class Generator:
         anim.save("anim.mp4", writer=writervideo)
         plt.show()
 
-    def generate_data_set(self):
-        d0_2_range = np.linspace(0.5, 10, 20)
-        a_range = np.linspace(0.5, 2, 10)
+    def generate_data_set(self, name, data_len=3):
+        d0_1_range = np.linspace(0.5, 2, data_len)
+        d0_2_range = np.linspace(2, 30, data_len)
+        sigma1_range = np.linspace(0.1, 1, data_len)
+        sigma2_range = np.linspace(1, 10, data_len)
+        a_range = np.linspace(0, 2, data_len)
         i = 0
+        dataset = []
         for a in a_range:
-            for d0_2 in d0_2_range:
-                i += 1
-                self.generate_pore_distribution(sigma1=0.1, sigma2=2, d0_1=1, d0_2=d0_2, a=a)
-                self.calculate_isotherms_from_new_kernel()
-                self.interp_desorption()
-                #
-                #
-                # point_isotherm = pygaps.PointIsotherm(
-                # # First the pandas.DataFrame
-                # isotherm_data=pd.DataFrame({
-                #     'pressure' : np.concatenate((self.pressures_s, self.pressures_d), axis = 0),             # required
-                #     'loading' :  np.concatenate((self.n_s, self.n_d), axis = 0),              # required
-                # }),
-                #     material='carbon',              # Required
-                #     adsorbate='nitrogen',           # Required
-                #     temperature=77,
-                #
-                #     loading_key='loading',          # The loading column
-                #     pressure_key='pressure',        # The pressure column
-                #     d0_1 = d0_1,
-                #     d0_2 = d0_2,
-                #
-                # )
-                #
-                # point_isotherm.to_aif(f"test_set/{i}.aif")
-                np.savez(f"data/test_carbon/{i}", a=self.pore_distribution, d0_2=d0_2, n_s=gen.n_s, n_d=gen.n_d)
+            for d0_1 in d0_1_range:
+                for d0_2 in d0_2_range:
+                    for sigma1 in sigma1_range:
+                        for sigma2 in sigma2_range:
+                            if i % 100 == 0:
+                                print(f"generated {i} out of {data_len**5}")
+                            i += 1
+                            self.generate_pore_distribution(sigma1=sigma1, sigma2=sigma2, d0_1=d0_1, d0_2=d0_2, a=a)
+                            self.calculate_isotherms()
+                            self.interp_desorption()
+                            dataset.append({"isotherm": self.n_s, "a": a, "d0_1": d0_1, "d0_2": d0_2,
+                                            "sigma1": sigma1, "sigma2": sigma2, "pore_distribution":self.pore_distribution})
+        with open(f'data/datasets/{name}.npy', 'wb') as f:
+            np.save(f, np.array(dataset))
 
     def save_isotherm_and_distribution(self, path):
         np.savez(path, n_s=self.n_s, n_d=self.n_d, distr=self.pore_distribution)
+
+
+if __name__ == "__main__":
+    gen = Generator(path_s="data/initial kernels/Kernel_Carbon_Adsorption.npy",
+                              path_d="data/initial kernels/Kernel_Carbon_Desorption.npy",
+                              path_p_d="data/initial kernels/Pressure_Carbon.npy",
+                              path_p_s="data/initial kernels/Pressure_Carbon.npy",
+                              path_a="data/initial kernels/Size_Kernel_Carbon_Adsorption.npy"
+                              )
+    gen.generate_data_set(data_len=5, name="carbon2")

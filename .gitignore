@@ -1,6 +1,9 @@
 /.ipynb_checkpoints
 /venv
+/venv311
+/venv312
 step-gen.ipynb
 .idea
 /__pycache__/
 *.mp4
+/data/datasets

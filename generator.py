@@ -2,8 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.animation as animation
+import time
+import os
+import hickle as hkl
 
-# mpl.use('TkAgg')
+mpl.use('TkAgg')
 plt.rcParams.update({'font.size': 14})
 
 
@@ -23,7 +26,7 @@ class Generator:
         with open(path_a, 'rb') as f:
             self.a_array = np.load(f)
 
-        self.pore_distribution = None
+        self.pore_distribution = np.empty(self.a_array.size)
         self.n_s = np.zeros(len(self.pressures_s))  # adsorption isotherm data
         self.n_d = np.zeros(len(self.pressures_d))  # desorption isotherm data
 
@@ -32,10 +35,10 @@ class Generator:
         pore_distribution1 /= max(pore_distribution1)
         pore_distribution2 = (1 / sigma2) * np.exp(-np.power((self.a_array - d0_2), 2) / (2 * sigma2 ** 2))
         pore_distribution2 /= max(pore_distribution2)
-        self.pore_distribution = pore_distribution1 * a + pore_distribution2
+        self.pore_distribution = pore_distribution1 * a + pore_distribution2 * (1 - a)
         self.pore_distribution /= max(self.pore_distribution)
 
-    def calculate_isotherms(self):
+    def calculate_isotherms_slow(self):
         self.n_s = np.zeros(len(self.pressures_s))
         self.n_d = np.zeros(len(self.pressures_d))
         for p_i in range(len(self.pressures_s)):
@@ -46,6 +49,18 @@ class Generator:
             for d_i in range(len(self.pore_distribution)):
                 if not np.isnan(self.data_desorb[d_i][p_i]):
                     self.n_d[p_i] += self.pore_distribution[d_i] * self.data_desorb[d_i][p_i]
+
+    def calculate_isotherms(self):
+        self.n_s = self.data_sorb.T.dot(self.pore_distribution)
+        self.n_d = self.data_desorb.T.dot(self.pore_distribution)
+
+    def calculate_calculate_isotherms_right(self):
+        self.p_d = np.empty(len(self.a_array))
+        self.p_d[:-1] = self.a_array[1:] - self.a_array[:1]
+        self.p_d[-1] = self.p_d[-2]
+        self.p_d = np.multiply(self.p_d, self.pore_distribution)
+        self.n_s = self.data_sorb.T.dot(self.p_d)
+        self.n_d = self.data_desorb.T.dot(self.p_d)
 
     def normalize_data(self):
         self.n_s = self.n_s / self.n_s.max()
@@ -72,7 +87,7 @@ class Generator:
     def ani(self):
         fig, axs = plt.subplots(2, 1, figsize=(8, 6))
         axs[0].set_ylim(0, 2)
-        self.generate_pore_distribution(sigma1=0.1, sigma2=2, d0_1=1, d0_2=10, a=0.1)
+        self.generate_pore_distribution(sigma1=0.1, sigma2=2, d0_1=1, d0_2=30, a=10)
         self.calculate_isotherms_from_new_kernel()
         sorb_line, = axs[0].plot(self.pressures_s, self.n_s, marker=".", label="Сорбция")
         desorb_line, = axs[0].plot(self.pressures_d, self.n_d, marker=".", label="Десорбция")
@@ -94,28 +109,60 @@ class Generator:
         plt.show()
 
     def generate_data_set(self, name, data_len=3):
-        d0_1_range = np.linspace(0.5, 2, data_len)
-        d0_2_range = np.linspace(2, 30, data_len)
+        path = f'data/datasets/{name}.npz'
+        number_of_params = 5
+        number_of_isotherms = data_len**number_of_params
+        d0_1_range = np.linspace(0, 2, data_len)
+        d0_2_range = np.linspace(0, 30, data_len)
         sigma1_range = np.linspace(0.1, 1, data_len)
         sigma2_range = np.linspace(1, 10, data_len)
-        a_range = np.linspace(0, 2, data_len)
+        a_range = np.linspace(0, 1, data_len)
+
+        isotherm_data = np.empty((number_of_isotherms, self.n_s.size))
+        a_data = np.empty(number_of_isotherms)
+        d0_1_data = np.empty(number_of_isotherms)
+        d0_2_data = np.empty(number_of_isotherms)
+        sigma1_data = np.empty(number_of_isotherms)
+        sigma2_data = np.empty(number_of_isotherms)
+        pore_distribution_data = np.empty((number_of_isotherms, self.pore_distribution.size))
+
         i = 0
-        dataset = []
+        print(f"Generating {number_of_isotherms} isotherms")
+        stat_time = time.time()
+        elapsed_time = time.time()
+        print_every = int(number_of_isotherms/100)
         for a in a_range:
             for d0_1 in d0_1_range:
                 for d0_2 in d0_2_range:
                     for sigma1 in sigma1_range:
                         for sigma2 in sigma2_range:
-                            if i % 100 == 0:
-                                print(f"generated {i} out of {data_len**5}")
-                            i += 1
+                            if (i+1) % print_every == 0:
+                                print(f"generated {round(i/number_of_isotherms*100)}%, "
+                                      f"{round(((number_of_isotherms-i)/print_every)*(time.time()-elapsed_time))} seconds until "
+                                      f"complete")
+                                elapsed_time = time.time()
                             self.generate_pore_distribution(sigma1=sigma1, sigma2=sigma2, d0_1=d0_1, d0_2=d0_2, a=a)
-                            self.calculate_isotherms()
+                            self.calculate_calculate_isotherms_right()
                             self.interp_desorption()
-                            dataset.append({"isotherm": self.n_s, "a": a, "d0_1": d0_1, "d0_2": d0_2,
-                                            "sigma1": sigma1, "sigma2": sigma2, "pore_distribution":self.pore_distribution})
-        with open(f'data/datasets/{name}.npy', 'wb') as f:
-            np.save(f, np.array(dataset))
+                            isotherm_data[i] = self.n_s
+                            a_data[i] = a
+                            d0_1_data[i] = d0_1
+                            d0_2_data[i] = d0_2
+                            sigma1_data[i] = sigma1
+                            sigma2_data[i] = sigma2
+                            pore_distribution_data[i] = self.pore_distribution
+                            i += 1
+
+        print(f"Generation finished in {round(time.time()-stat_time)} seconds !!!")
+        print(f"Writing data on disk {path} ...")
+        with open(f'data/datasets/{name}.npz', "wb") as f:
+            np.savez_compressed(f, isotherm_data=isotherm_data, a_data=a_data,
+                     d0_1_data=d0_1_data, d0_2_data=d0_2_data,
+                     sigma1_data=sigma1_data, sigma2_data=sigma2_data,
+                                pore_distribution_data=pore_distribution_data)
+        file_stats = os.stat(path)
+        print(f"file size {round(file_stats.st_size/(1024*1024))} MB")
+        print("FINISHED")
 
     def save_isotherm_and_distribution(self, path):
         np.savez(path, n_s=self.n_s, n_d=self.n_d, distr=self.pore_distribution)
@@ -128,4 +175,14 @@ if __name__ == "__main__":
                               path_p_s="data/initial kernels/Pressure_Carbon.npy",
                               path_a="data/initial kernels/Size_Kernel_Carbon_Adsorption.npy"
                               )
-    gen.generate_data_set(data_len=5, name="carbon2")
+    gen.generate_data_set(data_len=10, name="carbon3_right")
+    # gen.generate_pore_distribution(1, 1, 1, 20, 2)
+    # gen.calculate_isotherms()
+    # import copy
+    # gen1=copy.deepcopy(gen)
+    # gen1.pore_distribution=gen.pore_distribution
+    # gen1.calculate_calculate_isotherms_right()
+    # plt.plot(gen.pressures_s, gen.n_s/max(gen.n_s)*max(gen1.n_s), marker='.', label="old")
+    # plt.plot(gen1.pressures_s, gen1.n_s, marker='.', label="new")
+    # plt.legend()
+    # plt.show()

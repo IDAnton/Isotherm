@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -30,12 +32,12 @@ class Generator:
         self.n_s = np.zeros(len(self.pressures_s))  # adsorption isotherm data
         self.n_d = np.zeros(len(self.pressures_d))  # desorption isotherm data
 
-    def generate_pore_distribution(self, sigma1, sigma2, d0_1, d0_2, a=1):
+    def generate_pore_distribution(self, sigma1, sigma2, d0_1, d0_2, a=1, global_scale=1):
         pore_distribution1 = (1 / sigma1) * np.exp(-np.power((self.a_array - d0_1), 2) / (2 * sigma1 ** 2))
         pore_distribution1 /= max(pore_distribution1)
         pore_distribution2 = (1 / sigma2) * np.exp(-np.power((self.a_array - d0_2), 2) / (2 * sigma2 ** 2))
         pore_distribution2 /= max(pore_distribution2)
-        self.pore_distribution = pore_distribution1 * a + pore_distribution2 * (1 - a)
+        self.pore_distribution = (pore_distribution1 * a + pore_distribution2 * (1 - a))*global_scale
         self.pore_distribution /= max(self.pore_distribution)
 
     def calculate_isotherms_slow(self):
@@ -108,14 +110,14 @@ class Generator:
         anim.save("anim.mp4", writer=writervideo)
         plt.show()
 
-    def generate_data_set(self, name, data_len=3):
+    def generate_data_set(self, name, data_len=10):
         path = f'data/datasets/{name}.npz'
-        number_of_params = 5
-        number_of_isotherms = data_len**number_of_params
-        d0_1_range = np.linspace(0, 2, data_len)
-        d0_2_range = np.linspace(0, 30, data_len)
-        sigma1_range = np.linspace(0.1, 1, data_len)
-        sigma2_range = np.linspace(1, 10, data_len)
+        number_of_params = 3
+        number_of_isotherms = (data_len**number_of_params)*data_len*data_len*2*2
+        d0_1_range = np.linspace(0, 10, data_len*2)
+        d0_2_range = np.linspace(10, 60, data_len*2)
+        sigma1_range = np.linspace(1, 10, data_len)
+        sigma2_range = np.linspace(1, 30, data_len)
         a_range = np.linspace(0, 1, data_len)
 
         isotherm_data = np.empty((number_of_isotherms, self.n_s.size))
@@ -143,7 +145,7 @@ class Generator:
                                 elapsed_time = time.time()
                             self.generate_pore_distribution(sigma1=sigma1, sigma2=sigma2, d0_1=d0_1, d0_2=d0_2, a=a)
                             self.calculate_calculate_isotherms_right()
-                            self.interp_desorption()
+                            #self.interp_desorption()
                             isotherm_data[i] = self.n_s
                             a_data[i] = a
                             d0_1_data[i] = d0_1
@@ -152,7 +154,6 @@ class Generator:
                             sigma2_data[i] = sigma2
                             pore_distribution_data[i] = self.pore_distribution
                             i += 1
-
         print(f"Generation finished in {round(time.time()-stat_time)} seconds !!!")
         print(f"Writing data on disk {path} ...")
         with open(f'data/datasets/{name}.npz', "wb") as f:
@@ -167,17 +168,41 @@ class Generator:
     def save_isotherm_and_distribution(self, path):
         np.savez(path, n_s=self.n_s, n_d=self.n_d, distr=self.pore_distribution)
 
+    def generate_noise(self):
+        new_array = np.copy(self.n_s)
+        for i in range(1, len(self.n_s)-1):
+            X_MAX_ERROR = 0.001
+            p_point = random.uniform(self.pressures_s[i] - X_MAX_ERROR, self.pressures_s[i] + X_MAX_ERROR)
+            j1, j2 = sorted((np.abs(self.pressures_s - p_point)).argsort()[:2])
+            new_array[i] = np.interp(p_point, self.pressures_s[j1:j2], self.n_s[j1:j2])
+        plt.plot(self.pressures_s, new_array, label="noise")
+        plt.plot(self.pressures_s, self.n_s, label="real")
+        plt.legend()
+        plt.show()
+
 
 if __name__ == "__main__":
-    gen = Generator(path_s="data/initial kernels/Kernel_Carbon_Adsorption.npy",
+    # gen_silica = Generator(path_s="data/initial kernels/Kernel_Silica_Adsorption.npy",
+    #                           path_d="data/initial kernels/Kernel_Silica_Desorption.npy",
+    #                           path_p_d="data/initial kernels/Pressure_Silica.npy",
+    #                           path_p_s="data/initial kernels/Pressure_Silica.npy",
+    #                           path_a="data/initial kernels/Size_Kernel_Silica_Adsorption.npy"
+    #                           )
+    gen_carbon = Generator(path_s="data/initial kernels/Kernel_Carbon_Adsorption.npy",
                               path_d="data/initial kernels/Kernel_Carbon_Desorption.npy",
                               path_p_d="data/initial kernels/Pressure_Carbon.npy",
                               path_p_s="data/initial kernels/Pressure_Carbon.npy",
                               path_a="data/initial kernels/Size_Kernel_Carbon_Adsorption.npy"
                               )
-    gen.generate_data_set(data_len=10, name="carbon3_right")
-    # gen.generate_pore_distribution(1, 1, 1, 20, 2)
-    # gen.calculate_isotherms()
+    # gen_carbon.generate_data_set(data_len=10, name="Carbon_medium")
+
+
+    # gen_silica.generate_data_set(data_len=9, name="Silica_classification")
+
+    gen_carbon.generate_pore_distribution(1, 5, 5, 20, 0.75)
+    gen_carbon.calculate_calculate_isotherms_right()
+    gen_carbon.generate_noise()
+
     # import copy
     # gen1=copy.deepcopy(gen)
     # gen1.pore_distribution=gen.pore_distribution

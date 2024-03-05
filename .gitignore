@@ -2,7 +2,8 @@
 /venv
 /venv311
 /venv312
-step-gen.ipynb
+/venv10
+old notebooks/step-gen.ipynb
 .idea
 /__pycache__/
 *.mp4

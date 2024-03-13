@@ -154,6 +154,7 @@ class Generator:
                             sigma2_data[i] = sigma2
                             pore_distribution_data[i] = self.pore_distribution
                             i += 1
+
         print(f"Generation finished in {round(time.time()-stat_time)} seconds !!!")
         print(f"Writing data on disk {path} ...")
         with open(f'data/datasets/{name}.npz', "wb") as f:
@@ -170,24 +171,44 @@ class Generator:
 
     def generate_noise(self):
         new_array = np.copy(self.n_s)
-        for i in range(1, len(self.n_s)-1):
-            X_MAX_ERROR = 0.001
-            p_point = random.uniform(self.pressures_s[i] - X_MAX_ERROR, self.pressures_s[i] + X_MAX_ERROR)
-            j1, j2 = sorted((np.abs(self.pressures_s - p_point)).argsort()[:2])
-            new_array[i] = np.interp(p_point, self.pressures_s[j1:j2], self.n_s[j1:j2])
-        plt.plot(self.pressures_s, new_array, label="noise")
-        plt.plot(self.pressures_s, self.n_s, label="real")
-        plt.legend()
-        plt.show()
+
+        # X
+        # for i in range(1, len(self.n_s)-1):
+        #     X_MAX_ERROR = 0.001
+        #     p_point = random.uniform(self.pressures_s[i] - X_MAX_ERROR, self.pressures_s[i] + X_MAX_ERROR)
+        #     j1, j2 = sorted((np.abs(self.pressures_s - p_point)).argsort()[:2])
+        #     new_array[i] = np.interp(p_point, self.pressures_s[j1:j2], self.n_s[j1:j2])
+
+        # Y
+        #random.seed(0)
+        error = 0
+        X_UP_ERROR = 0.02
+        X_LOW_ERROR = -0.02
+        for i in range(len(self.n_s)):
+            up = min(self.n_s[i]*X_UP_ERROR, max(self.n_s) * 0.002)
+            down = max(self.n_s[i]*X_LOW_ERROR, -max(self.n_s) * 0.002)
+
+            error = random.uniform(down, up) + error
+            if error > up*5 or error < down*5:
+                error *= random.uniform(0.5, 0.8)
+
+            new_array[i] = self.n_s[i] + error
+
+
+        # plt.plot(self.pressures_s, new_array, label="noise", marker=".")
+        # plt.plot(self.pressures_s, self.n_s, label="real", marker=".")
+        # plt.legend()
+        # plt.show()
+        return new_array
 
 
 if __name__ == "__main__":
-    # gen_silica = Generator(path_s="data/initial kernels/Kernel_Silica_Adsorption.npy",
-    #                           path_d="data/initial kernels/Kernel_Silica_Desorption.npy",
-    #                           path_p_d="data/initial kernels/Pressure_Silica.npy",
-    #                           path_p_s="data/initial kernels/Pressure_Silica.npy",
-    #                           path_a="data/initial kernels/Size_Kernel_Silica_Adsorption.npy"
-    #                           )
+    gen_silica = Generator(path_s="data/initial kernels/Kernel_Silica_Adsorption.npy",
+                              path_d="data/initial kernels/Kernel_Silica_Desorption.npy",
+                              path_p_d="data/initial kernels/Pressure_Silica.npy",
+                              path_p_s="data/initial kernels/Pressure_Silica.npy",
+                              path_a="data/initial kernels/Size_Kernel_Silica_Adsorption.npy"
+                              )
     gen_carbon = Generator(path_s="data/initial kernels/Kernel_Carbon_Adsorption.npy",
                               path_d="data/initial kernels/Kernel_Carbon_Desorption.npy",
                               path_p_d="data/initial kernels/Pressure_Carbon.npy",
@@ -197,11 +218,12 @@ if __name__ == "__main__":
     # gen_carbon.generate_data_set(data_len=10, name="Carbon_medium")
 
 
-    # gen_silica.generate_data_set(data_len=9, name="Silica_classification")
+    gen_silica.generate_data_set(data_len=8, name="Silica_classification")
+    gen_carbon.generate_data_set(data_len=8, name="Carbon_classification")
 
-    gen_carbon.generate_pore_distribution(1, 5, 5, 20, 0.75)
-    gen_carbon.calculate_calculate_isotherms_right()
-    gen_carbon.generate_noise()
+    # gen_carbon.generate_pore_distribution(2, 5, 5, 35, 0.75)
+    # gen_carbon.calculate_calculate_isotherms_right()
+    # gen_carbon.generate_noise()
 
     # import copy
     # gen1=copy.deepcopy(gen)

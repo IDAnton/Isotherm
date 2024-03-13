@@ -8,3 +8,4 @@ old notebooks/step-gen.ipynb
 /__pycache__/
 *.mp4
 /data/datasets
+*.pyc
